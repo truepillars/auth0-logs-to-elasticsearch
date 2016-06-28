@@ -104,7 +104,6 @@ function lastLogCheckpoint(req, res) {
           console.log(`Uploading ${url}.`);
           var body = {};
           body.post_date = now;
-          body['date'] = log['date'];
           body.message = log;
           httpRequest(optionsFactory(url, body), function (error /*, response, body */) {
             if (error) {

@@ -147,11 +147,10 @@ module.exports =
 
 	      async.eachLimit(context.logs, 5, function (log, cb) {
 	        var date = moment(log.date);
-          var url = ${ctx.data.ELASTICSEARCH_URL} + '/' + ${ctx.data.ELASTICSEARCH_INDEX} + '-' + ${date.format('YYYY.MM.DD')} + '/log';
+	        var url = ctx.data.ELASTICSEARCH_URL + '/' + ctx.data.ELASTICSEARCH_INDEX + '-' + date.format('YYYY.MM.DD') + '/log';
 	        console.log('Uploading ' + url + '.');
 	        var body = {};
 	        body.post_date = now;
-          body['date'] = log['date'];
 	        body.message = log;
 	        httpRequest(optionsFactory(url, body), function (error /*, response, body */) {
 	          if (error) {
