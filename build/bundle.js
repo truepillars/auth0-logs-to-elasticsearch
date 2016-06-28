@@ -152,7 +152,7 @@ module.exports =
 	        var body = {};
 	        body.post_date = now;
 	        body[ctx.data.LOGSTASH_INDEX] = log[ctx.data.LOGSTASH_INDEX] || 'auth0';
-	        body.message = JSON.stringify(log);
+	        body.message = log;
 	        httpRequest(optionsFactory(body), function (error /*, response, body */) {
 	          if (error) {
 	            console.log(error);
