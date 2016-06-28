@@ -1,11 +1,11 @@
 {
-  "title": "Auth0 Logs to Logstash",
-  "name": "auth0-logs-to-logstash",
+  "title": "Auth0 Logs to Elasticsearch",
+  "name": "auth0-logs-to-elasticsearch",
   "version": "1.1.0",
   "author": "auth0",
-  "description": "This extension will take all of your Auth0 logs and export them to Logstash",
+  "description": "This extension will take all of your Auth0 logs and export them to Elasticsearch",
   "type": "cron",
-  "repository": "https://github.com/auth0/auth0-logs-to-logstash",
+  "repository": "https://github.com/truepillars/auth0-logs-to-elasticsearch",
   "keywords": [
     "auth0",
     "extension"
@@ -19,12 +19,12 @@
       "description": "The ammount of logs to be read on each execution. Maximun is 100.",
       "default": 100
     },
-    "LOGSTASH_URL": {
-      "description": "Logstash URL (as defined for use with logstash-input-http plugin)",
+    "ELASTICSEARCH_URL": {
+      "description": "Elasticsearch URL",
       "required": true
     },
-    "LOGSTASH_INDEX": {
-      "description": "Logstash Index (as defined in logstash setup",
+    "ELASTICSEARCH_INDEX": {
+      "description": "Elasticsearch Index",
       "required": true
     },
     "LOG_LEVEL": {

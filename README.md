@@ -1,8 +1,8 @@
-# Auth0 - Logs to Logstash
+# Auth0 - Logs to Elasticsearch
 
 [![Auth0 Extensions](http://cdn.auth0.com/extensions/assets/badge.svg)](https://sandbox.it.auth0.com/api/run/auth0-extensions/extensions-badge?webtask_no_cache=1)
 
-This extension will take all of your Auth0 logs and export them to Logstash.
+This extension will take all of your Auth0 logs and export them to Elasticsearch.
 
 ## Configure Webtask
 
@@ -22,14 +22,14 @@ To run it on a schedule (run every 5 minutes for example):
 ```bash
 $ npm run build
 $ wt cron schedule \
-    --name auth0-logs-to-logstash \
+    --name auth0-logs-to-elasticsearch \
     --secret AUTH0_DOMAIN="YOUR_AUTH0_DOMAIN" \
     --secret AUTH0_GLOBAL_CLIENT_ID="YOUR_AUTH0_GLOBAL_CLIENT_ID" \
     --secret AUTH0_GLOBAL_CLIENT_SECRET="YOUR_AUTH0_GLOBAL_CLIENT_SECRET" \
     --secret LOG_LEVEL="1" \
     --secret LOG_TYPES="s,f" \
-    --secret LOGSTASH_URL="LOGSTASH_URL" \
-    --secret LOGSTASH_INDEX="LOGSTASH_INDEX" \
+    --secret ELASTICSEARCH_URL="ELASTICSEARCH_URL" \
+    --secret ELASTICSEARCH_INDEX="ELASTICSEARCH_INDEX" \
     "*/5 * * * *" \
     build/bundle.js
 ```
@@ -46,21 +46,14 @@ The following settings are optional:
 
 Very simple, but there is some ground work getting setup, in particular if installing locally.
 
-Assuming here you wish to make use of the `ELK` stack - visualizing data with ElasticSearch, Logstash, and Kibana.
+Assuming here you wish to make use of the `ELK` stack - visualizing data with ElasticSearch, Elasticsearch, and Kibana.
 
 Here are some instructions on getting setup:
 
 ```
 brew install elasticsearch
-brew install logstash
 brew install kibana
 ```
-
-Strongly recommend you install the latest versions of each.
-Install the [plugins](https://www.elastic.co/guide/en/logstash/current/input-plugins.html) you need.
-
-For this NPM module, you need to have [logstash-input-http](https://github.com/logstash-plugins/logstash-input-http) installed.
-By default, this is already installed on modern versions of `logstash` out of the box.
 
 In separate terminal windows (shells), just run:
 
@@ -71,7 +64,7 @@ $ kibana
 
 If you opted to have elasticsearch and kibana start automatically as a service on startup, then you don't need to explicitly start them as above.
 
-#### Get some data into Logstash
+#### Get some data into Elasticsearch
 
 For test purposes only, just run the following:
 
@@ -100,7 +93,7 @@ Right, you're setup locally, time to use the Auth0 extension!
 
 ## Usage
 
-Install the extension, and inspect your logstash logs with Kibana!
+Install the extension, and inspect your elasticsearch logs with Kibana!
 
 
 ## Filters

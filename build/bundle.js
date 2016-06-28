@@ -60,7 +60,7 @@ module.exports =
 
 	function lastLogCheckpoint(req, res) {
 	  var ctx = req.webtaskContext;
-	  var required_settings = ['AUTH0_DOMAIN', 'AUTH0_CLIENT_ID', 'AUTH0_CLIENT_SECRET', 'LOGSTASH_URL', 'LOGSTASH_INDEX'];
+	  var required_settings = ['AUTH0_DOMAIN', 'AUTH0_CLIENT_ID', 'AUTH0_CLIENT_SECRET', 'ELASTICSEARCH_URL', 'ELASTICSEARCH_INDEX'];
 	  var missing_settings = required_settings.filter(function (setting) {
 	    return !ctx.data[setting];
 	  });
@@ -77,10 +77,10 @@ module.exports =
 	      this primes the http request with the eventual message
 	      and necessary HTTP info
 	     */
-	    var optionsFactory = function optionsFactory(body) {
+	    var optionsFactory = function optionsFactory(url, body) {
 	      return {
 	        method: 'POST',
-	        url: ctx.data.LOGSTASH_URL,
+	        url: url,
 	        headers: {
 	          'cache-control': 'no-cache',
 	          'content-type': 'application/json' },
@@ -147,13 +147,13 @@ module.exports =
 
 	      async.eachLimit(context.logs, 5, function (log, cb) {
 	        var date = moment(log.date);
-	        var url = date.format('YYYY/MM/DD') + '/' + date.format('HH') + '/' + log._id + '.json';
+          var url = ${ctx.data.ELASTICSEARCH_URL} + '/' + ${ctx.data.ELASTICSEARCH_INDEX} + '-' + ${date.format('YYYY.MM.DD')} + '/log';
 	        console.log('Uploading ' + url + '.');
 	        var body = {};
 	        body.post_date = now;
-	        body[ctx.data.LOGSTASH_INDEX] = log[ctx.data.LOGSTASH_INDEX] || 'auth0';
+          body['date'] = log['date'];
 	        body.message = log;
-	        httpRequest(optionsFactory(body), function (error /*, response, body */) {
+	        httpRequest(optionsFactory(url, body), function (error /*, response, body */) {
 	          if (error) {
 	            console.log(error);
 	            return cb(error);

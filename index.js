@@ -12,7 +12,7 @@ const httpRequest = require('request');
 
 function lastLogCheckpoint(req, res) {
   let ctx = req.webtaskContext;
-  let required_settings = ['AUTH0_DOMAIN', 'AUTH0_CLIENT_ID', 'AUTH0_CLIENT_SECRET', 'LOGSTASH_URL', 'LOGSTASH_INDEX'];
+  let required_settings = ['AUTH0_DOMAIN', 'AUTH0_CLIENT_ID', 'AUTH0_CLIENT_SECRET', 'ELASTICSEARCH_URL', 'ELASTICSEARCH_INDEX'];
   let missing_settings = required_settings.filter((setting) => !ctx.data[setting]);
 
   if (missing_settings.length) {
@@ -27,10 +27,10 @@ function lastLogCheckpoint(req, res) {
       this primes the http request with the eventual message
       and necessary HTTP info
      */
-    var optionsFactory = function (body) {
+    var optionsFactory = function (url, body) {
       return {
         method: 'POST',
-        url: ctx.data.LOGSTASH_URL,
+        url: url,
         headers:
         {
           'cache-control': 'no-cache',
@@ -100,13 +100,13 @@ function lastLogCheckpoint(req, res) {
 
         async.eachLimit(context.logs, 5, (log, cb) => {
           const date = moment(log.date);
-          const url = `${date.format('YYYY/MM/DD')}/${date.format('HH')}/${log._id}.json`;
+          const url = ${ctx.data.ELASTICSEARCH_URL} + '/' + ${ctx.data.ELASTICSEARCH_INDEX} + '-' + ${date.format('YYYY.MM.DD')} + '/log';
           console.log(`Uploading ${url}.`);
           var body = {};
           body.post_date = now;
-          body[ctx.data.LOGSTASH_INDEX] = log[ctx.data.LOGSTASH_INDEX] || 'auth0';
+          body['date'] = log['date'];
           body.message = log;
-          httpRequest(optionsFactory(body), function (error /*, response, body */) {
+          httpRequest(optionsFactory(url, body), function (error /*, response, body */) {
             if (error) {
               console.log(error);
               return cb(error);
