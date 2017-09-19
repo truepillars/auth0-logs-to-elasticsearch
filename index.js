@@ -8,6 +8,7 @@ const app = express();
 const Request = require('superagent');
 const memoizer = require('lru-memoizer');
 const httpRequest = require('request');
+const metadata = require('./webtask.json');
 
 
 function lastLogCheckpoint(req, res) {
@@ -379,5 +380,10 @@ app.use(function (req, res, next) {
 
 app.get('/', lastLogCheckpoint);
 app.post('/', lastLogCheckpoint);
+
+// This endpoint would be called by webtask-gallery to dicover your metadata
+app.get('/meta', function (req, res) {
+  res.status(200).send(metadata);
+});
 
 module.exports = Webtask.fromExpress(app);
