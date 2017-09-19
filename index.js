@@ -101,7 +101,7 @@ function lastLogCheckpoint(req, res) {
 
         async.eachLimit(context.logs, 5, (log, cb) => {
           const date = moment(log.date);
-          const url = ${ctx.data.ELASTICSEARCH_URL} + '/' + ${ctx.data.ELASTICSEARCH_INDEX} + '-' + ${date.format('YYYY.MM.DD')} + '/log';
+          const url = `${ctx.data.ELASTICSEARCH_URL}/${ctx.data.ELASTICSEARCH_INDEX}-${date.format('YYYY.MM.DD')}/log`;
           console.log(`Uploading ${url}.`);
           var body = {};
           body.post_date = now;

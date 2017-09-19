@@ -43,7 +43,7 @@ module.exports =
 /************************************************************************/
 /******/ ([
 /* 0 */
-/***/ function(module, exports, __webpack_require__) {
+/***/ (function(module, exports, __webpack_require__) {
 
 	'use strict';
 
@@ -54,9 +54,10 @@ module.exports =
 	var express = __webpack_require__(5);
 	var Webtask = __webpack_require__(6);
 	var app = express();
-	var Request = __webpack_require__(9);
-	var memoizer = __webpack_require__(10);
-	var httpRequest = __webpack_require__(8);
+	var Request = __webpack_require__(14);
+	var memoizer = __webpack_require__(17);
+	var httpRequest = __webpack_require__(16);
+	var metadata = __webpack_require__(18);
 
 	function lastLogCheckpoint(req, res) {
 	  var ctx = req.webtaskContext;
@@ -415,51 +416,64 @@ module.exports =
 	app.get('/', lastLogCheckpoint);
 	app.post('/', lastLogCheckpoint);
 
+	// This endpoint would be called by webtask-gallery to dicover your metadata
+	app.get('/meta', function (req, res) {
+	  res.status(200).send(metadata);
+	});
+
 	module.exports = Webtask.fromExpress(app);
 
-/***/ },
+/***/ }),
 /* 1 */
-/***/ function(module, exports) {
+/***/ (function(module, exports) {
 
 	module.exports = require("winston");
 
-/***/ },
+/***/ }),
 /* 2 */
-/***/ function(module, exports) {
+/***/ (function(module, exports) {
 
 	module.exports = require("async");
 
-/***/ },
+/***/ }),
 /* 3 */
-/***/ function(module, exports) {
+/***/ (function(module, exports) {
 
 	module.exports = require("moment");
 
-/***/ },
+/***/ }),
 /* 4 */
-/***/ function(module, exports) {
+/***/ (function(module, exports) {
 
 	module.exports = require("useragent");
 
-/***/ },
+/***/ }),
 /* 5 */
-/***/ function(module, exports) {
+/***/ (function(module, exports) {
 
 	module.exports = require("express");
 
-/***/ },
+/***/ }),
 /* 6 */
-/***/ function(module, exports, __webpack_require__) {
+/***/ (function(module, exports, __webpack_require__) {
 
+	exports.auth0 = __webpack_require__(7);
 	exports.fromConnect = exports.fromExpress = fromConnect;
 	exports.fromHapi = fromHapi;
 	exports.fromServer = exports.fromRestify = fromServer;
 
-
 	// API functions
 
+	function addAuth0(func) {
+	    func.auth0 = function (options) {
+	        return exports.auth0(func, options);
+	    }
+
+	    return func;
+	}
+
 	function fromConnect (connectFn) {
-	    return function (context, req, res) {
+	    return addAuth0(function (context, req, res) {
 	        var normalizeRouteRx = createRouteNormalizationRx(req.x_wt.jtn);
 
 	        req.originalUrl = req.url;
@@ -467,7 +481,7 @@ module.exports =
 	        req.webtaskContext = attachStorageHelpers(context);
 
 	        return connectFn(req, res);
-	    };
+	    });
 	}
 
 	function fromHapi(server) {
@@ -480,17 +494,17 @@ module.exports =
 	        request.webtaskContext = webtaskContext;
 	    });
 
-	    return function (context, req, res) {
+	    return addAuth0(function (context, req, res) {
 	        var dispatchFn = server._dispatch();
 
 	        webtaskContext = attachStorageHelpers(context);
 
 	        dispatchFn(req, res);
-	    };
+	    });
 	}
 
 	function fromServer(httpServer) {
-	    return function (context, req, res) {
+	    return addAuth0(function (context, req, res) {
 	        var normalizeRouteRx = createRouteNormalizationRx(req.x_wt.jtn);
 
 	        req.originalUrl = req.url;
@@ -498,7 +512,7 @@ module.exports =
 	        req.webtaskContext = attachStorageHelpers(context);
 
 	        return httpServer.emit('request', req, res);
-	    };
+	    });
 	}
 
 
@@ -528,7 +542,7 @@ module.exports =
 
 
 	    function readNotAvailable(path, options, cb) {
-	        var Boom = __webpack_require__(7);
+	        var Boom = __webpack_require__(15);
 
 	        if (typeof options === 'function') {
 	            cb = options;
@@ -539,8 +553,8 @@ module.exports =
 	    }
 
 	    function readFromPath(path, options, cb) {
-	        var Boom = __webpack_require__(7);
-	        var Request = __webpack_require__(8);
+	        var Boom = __webpack_require__(15);
+	        var Request = __webpack_require__(16);
 
 	        if (typeof options === 'function') {
 	            cb = options;
@@ -563,7 +577,7 @@ module.exports =
 	    }
 
 	    function writeNotAvailable(path, data, options, cb) {
-	        var Boom = __webpack_require__(7);
+	        var Boom = __webpack_require__(15);
 
 	        if (typeof options === 'function') {
 	            cb = options;
@@ -574,8 +588,8 @@ module.exports =
 	    }
 
 	    function writeToPath(path, data, options, cb) {
-	        var Boom = __webpack_require__(7);
-	        var Request = __webpack_require__(8);
+	        var Boom = __webpack_require__(15);
+	        var Request = __webpack_require__(16);
 
 	        if (typeof options === 'function') {
 	            cb = options;
@@ -598,295 +612,474 @@ module.exports =
 	}
 
 
-/***/ },
+/***/ }),
 /* 7 */
-/***/ function(module, exports) {
+/***/ (function(module, exports, __webpack_require__) {
 
-	module.exports = require("boom");
+	var url = __webpack_require__(8);
+	var error = __webpack_require__(9);
+	var handleAppEndpoint = __webpack_require__(10);
+	var handleLogin = __webpack_require__(12);
+	var handleCallback = __webpack_require__(13);
 
-/***/ },
+	module.exports = function (webtask, options) {
+	    if (typeof webtask !== 'function' || webtask.length !== 3) {
+	        throw new Error('The auth0() function can only be called on webtask functions with the (ctx, req, res) signature.');
+	    }
+	    if (!options) {
+	        options = {};
+	    }
+	    if (typeof options !== 'object') {
+	        throw new Error('The options parameter must be an object.');
+	    }
+	    if (options.scope && typeof options.scope !== 'string') {
+	        throw new Error('The scope option, if specified, must be a string.');
+	    }
+	    if (options.authorized && ['string','function'].indexOf(typeof options.authorized) < 0 && !Array.isArray(options.authorized)) {
+	        throw new Error('The authorized option, if specified, must be a string or array of strings with e-mail or domain names, or a function that accepts (ctx, req) and returns boolean.');
+	    }
+	    if (options.exclude && ['string','function'].indexOf(typeof options.exclude) < 0 && !Array.isArray(options.exclude)) {
+	        throw new Error('The exclude option, if specified, must be a string or array of strings with URL paths that do not require authentication, or a function that accepts (ctx, req, appPath) and returns boolean.');
+	    }
+	    if (options.clientId && typeof options.clientId !== 'function') {
+	        throw new Error('The clientId option, if specified, must be a function that accepts (ctx, req) and returns an Auth0 Client ID.');
+	    }
+	    if (options.clientSecret && typeof options.clientSecret !== 'function') {
+	        throw new Error('The clientSecret option, if specified, must be a function that accepts (ctx, req) and returns an Auth0 Client Secret.');
+	    }
+	    if (options.domain && typeof options.domain !== 'function') {
+	        throw new Error('The domain option, if specified, must be a function that accepts (ctx, req) and returns an Auth0 Domain.');
+	    }
+	    if (options.webtaskSecret && typeof options.webtaskSecret !== 'function') {
+	        throw new Error('The webtaskSecret option, if specified, must be a function that accepts (ctx, req) and returns a key to be used to sign issued JWT tokens.');
+	    }
+	    if (options.getApiKey && typeof options.getApiKey !== 'function') {
+	        throw new Error('The getApiKey option, if specified, must be a function that accepts (ctx, req) and returns an apiKey associated with the request.');
+	    }
+	    if (options.loginSuccess && typeof options.loginSuccess !== 'function') {
+	        throw new Error('The loginSuccess option, if specified, must be a function that accepts (ctx, req, res, baseUrl) and generates a response.');
+	    }
+	    if (options.loginError && typeof options.loginError !== 'function') {
+	        throw new Error('The loginError option, if specified, must be a function that accepts (error, ctx, req, res, baseUrl) and generates a response.');
+	    }
+
+	    options.clientId = options.clientId || function (ctx, req) {
+	        return ctx.secrets.AUTH0_CLIENT_ID;
+	    };
+	    options.clientSecret = options.clientSecret || function (ctx, req) {
+	        return ctx.secrets.AUTH0_CLIENT_SECRET;
+	    };
+	    options.domain = options.domain || function (ctx, req) {
+	        return ctx.secrets.AUTH0_DOMAIN;
+	    };
+	    options.webtaskSecret = options.webtaskSecret || function (ctx, req) {
+	        // By default we don't expect developers to specify WEBTASK_SECRET when
+	        // creating authenticated webtasks. In this case we will use webtask token
+	        // itself as a JWT signing key. The webtask token of a named webtask is secret
+	        // and it contains enough entropy (jti, iat, ca) to pass
+	        // for a symmetric key. Using webtask token ensures that the JWT signing secret 
+	        // remains constant for the lifetime of the webtask; however regenerating 
+	        // the webtask will invalidate previously issued JWTs. 
+	        return ctx.secrets.WEBTASK_SECRET || req.x_wt.token;
+	    };
+	    options.getApiKey = options.getApiKey || function (ctx, req) {
+	        if (req.headers.authorization && req.headers.authorization.split(' ')[0] === 'Bearer') {
+	            return req.headers.authorization.split(' ')[1];
+	        } else if (req.query && req.query.apiKey) {
+	            return req.query.apiKey;
+	        }
+	        return null;
+	    };
+	    options.loginSuccess = options.loginSuccess || function (ctx, req, res, baseUrl) {
+	        res.writeHead(302, { Location: baseUrl + '?apiKey=' + ctx.apiKey });
+	        return res.end();
+	    };
+	    options.loginError = options.loginError || function (error, ctx, req, res, baseUrl) {
+	        if (req.method === 'GET') {
+	            if (error.redirect) {
+	                res.writeHead(302, { Location: error.redirect });
+	                return res.end(JSON.stringify(error));
+	            }
+	            res.writeHead(error.code || 401, { 
+	                'Content-Type': 'text/html', 
+	                'Cache-Control': 'no-cache' 
+	            });
+	            return res.end(getNotAuthorizedHtml(baseUrl + '/login'));
+	        }
+	        else {
+	            // Reject all other requests
+	            return error(error, res);
+	        }            
+	    };
+	    if (typeof options.authorized === 'string') {
+	        options.authorized = [ options.authorized ];
+	    }
+	    if (Array.isArray(options.authorized)) {
+	        var authorized = [];
+	        options.authorized.forEach(function (a) {
+	            authorized.push(a.toLowerCase());
+	        });
+	        options.authorized = function (ctx, res) {
+	            if (ctx.user.email_verified) {
+	                for (var i = 0; i < authorized.length; i++) {
+	                    var email = ctx.user.email.toLowerCase();
+	                    if (email === authorized[i] || authorized[i][0] === '@' && email.indexOf(authorized[i]) > 1) {
+	                        return true;
+	                    }
+	                }
+	            }
+	            return false;
+	        }
+	    }
+	    if (typeof options.exclude === 'string') {
+	        options.exclude = [ options.exclude ];
+	    }
+	    if (Array.isArray(options.exclude)) {
+	        var exclude = options.exclude;
+	        options.exclude = function (ctx, res, appPath) {
+	            return exclude.indexOf(appPath) > -1;
+	        }
+	    }
+
+	    return createAuthenticatedWebtask(webtask, options);
+	};
+
+	function createAuthenticatedWebtask(webtask, options) {
+
+	    // Inject middleware into the HTTP pipeline before the webtask handler
+	    // to implement authentication endpoints and perform authentication 
+	    // and authorization.
+
+	    return function (ctx, req, res) {
+	        if (!req.x_wt.jtn || !req.x_wt.container) {
+	            return error({
+	                code: 400,
+	                message: 'Auth0 authentication can only be used with named webtasks.'
+	            }, res);
+	        }
+
+	        var routingInfo = getRoutingInfo(req);
+	        if (!routingInfo) {
+	            return error({
+	                code: 400,
+	                message: 'Error processing request URL path.'
+	            }, res);
+	        }
+	        switch (req.method === 'GET' && routingInfo.appPath) {
+	            case '/login': handleLogin(options, ctx, req, res, routingInfo); break;
+	            case '/callback': handleCallback(options, ctx, req, res, routingInfo); break;
+	            default: handleAppEndpoint(webtask, options, ctx, req, res, routingInfo); break;
+	        };
+	        return;
+	    };
+	}
+
+	function getRoutingInfo(req) {
+	    var routingInfo = url.parse(req.url, true);
+	    var segments = routingInfo.pathname.split('/');
+	    if (segments[1] === 'api' && segments[2] === 'run' && segments[3] === req.x_wt.container && segments[4] === req.x_wt.jtn) {
+	        // Shared domain case: /api/run/{container}/{jtn}
+	        routingInfo.basePath = segments.splice(0, 5).join('/');
+	    }
+	    else if (segments[1] === req.x_wt.container && segments[2] === req.x_wt.jtn) {
+	        // Custom domain case: /{container}/{jtn}
+	        routingInfo.basePath = segments.splice(0, 3).join('/');
+	    }
+	    else {
+	        return null;
+	    }
+	    routingInfo.appPath = '/' + segments.join('/');
+	    routingInfo.baseUrl = [
+	        req.headers['x-forwarded-proto'] || 'https',
+	        '://',
+	        req.headers.host,
+	        routingInfo.basePath
+	    ].join('');
+	    return routingInfo;
+	}
+
+	var notAuthorizedTemplate = function () {/*
+	<!DOCTYPE html5>
+	<html>
+	  <head>
+	    <meta charset="utf-8"/>
+	    <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+	    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+	    <link href="https://cdn.auth0.com/styleguide/latest/index.css" rel="stylesheet" />
+	    <title>Access denied</title>
+	  </head>
+	  <body>
+	    <div class="container">
+	      <div class="row text-center">
+	        <h1><a href="https://auth0.com" title="Go to Auth0!"><img src="https://cdn.auth0.com/styleguide/1.0.0/img/badge.svg" alt="Auth0 badge" /></a></h1>
+	        <h1>Not authorized</h1>
+	        <p><a href="##">Try again</a></p>
+	      </div>
+	    </div>
+	  </body>
+	</html>
+	*/}.toString().match(/[^]*\/\*([^]*)\*\/\s*\}$/)[1];
+
+	function getNotAuthorizedHtml(loginUrl) {
+	    return notAuthorizedTemplate.replace('##', loginUrl);
+	}
+
+
+/***/ }),
 /* 8 */
-/***/ function(module, exports) {
+/***/ (function(module, exports) {
 
-	module.exports = require("request");
+	module.exports = require("url");
 
-/***/ },
+/***/ }),
 /* 9 */
-/***/ function(module, exports) {
+/***/ (function(module, exports) {
+
+	module.exports = function (err, res) {
+	    res.writeHead(err.code || 500, { 
+	        'Content-Type': 'application/json',
+	        'Cache-Control': 'no-cache'
+	    });
+	    res.end(JSON.stringify(err));
+	};
+
+
+/***/ }),
+/* 10 */
+/***/ (function(module, exports, __webpack_require__) {
+
+	var error = __webpack_require__(9);
+
+	module.exports = function (webtask, options, ctx, req, res, routingInfo) {
+	    return options.exclude && options.exclude(ctx, req, routingInfo.appPath)
+	        ? run()
+	        : authenticate();
+
+	    function authenticate() {
+	        var apiKey = options.getApiKey(ctx, req);
+	        if (!apiKey) {
+	            return options.loginError({
+	                code: 401,
+	                message: 'Unauthorized.',
+	                error: 'Missing apiKey.',
+	                redirect: routingInfo.baseUrl + '/login'
+	            }, ctx, req, res, routingInfo.baseUrl);
+	        }
+
+	        // Authenticate
+
+	        var secret = options.webtaskSecret(ctx, req);
+	        if (!secret) {
+	            return error({
+	                code: 400,
+	                message: 'The webtask secret must be provided to allow for validating apiKeys.'
+	            }, res);
+	        }
+
+	        try {
+	            ctx.user = req.user = __webpack_require__(11).verify(apiKey, secret);
+	        }
+	        catch (e) {
+	            return options.loginError({
+	                code: 401,
+	                message: 'Unauthorized.',
+	                error: e.message
+	            }, ctx, req, res, routingInfo.baseUrl);       
+	        }
+
+	        ctx.apiKey = apiKey;
+
+	        // Authorize
+
+	        if  (options.authorized && !options.authorized(ctx, req)) {
+	            return options.loginError({
+	                code: 403,
+	                message: 'Forbidden.'
+	            }, ctx, req, res, routingInfo.baseUrl);        
+	        }
+
+	        return run();
+	    }
+
+	    function run() {
+	        // Route request to webtask code
+	        return webtask(ctx, req, res);
+	    }
+	};
+
+
+/***/ }),
+/* 11 */
+/***/ (function(module, exports) {
+
+	module.exports = require("jsonwebtoken");
+
+/***/ }),
+/* 12 */
+/***/ (function(module, exports, __webpack_require__) {
+
+	var error = __webpack_require__(9);
+
+	module.exports = function(options, ctx, req, res, routingInfo) {
+	    var authParams = {
+	        clientId: options.clientId(ctx, req),
+	        domain: options.domain(ctx, req)
+	    };
+	    var count = !!authParams.clientId + !!authParams.domain;
+	    var scope = 'openid name email email_verified ' + (options.scope || '');
+	    if (count ===  0) {
+	        // TODO, tjanczuk, support the shared Auth0 application case
+	        return error({
+	            code: 501,
+	            message: 'Not implemented.'
+	        }, res);
+	        // Neither client id or domain are specified; use shared Auth0 settings
+	        // var authUrl = 'https://auth0.auth0.com/i/oauth2/authorize'
+	        //     + '?response_type=code'
+	        //     + '&audience=https://auth0.auth0.com/userinfo'
+	        //     + '&scope=' + encodeURIComponent(scope)
+	        //     + '&client_id=' + encodeURIComponent(routingInfo.baseUrl)
+	        //     + '&redirect_uri=' + encodeURIComponent(routingInfo.baseUrl + '/callback');
+	        // res.writeHead(302, { Location: authUrl });
+	        // return res.end();
+	    }
+	    else if (count === 2) {
+	        // Use custom Auth0 account
+	        var authUrl = 'https://' + authParams.domain + '/authorize' 
+	            + '?response_type=code'
+	            + '&scope=' + encodeURIComponent(scope)
+	            + '&client_id=' + encodeURIComponent(authParams.clientId)
+	            + '&redirect_uri=' + encodeURIComponent(routingInfo.baseUrl + '/callback');
+	        res.writeHead(302, { Location: authUrl });
+	        return res.end();
+	    }
+	    else {
+	        return error({
+	            code: 400,
+	            message: 'Both or neither Auth0 Client ID and Auth0 domain must be specified.'
+	        }, res);
+	    }
+	};
+
+
+/***/ }),
+/* 13 */
+/***/ (function(module, exports, __webpack_require__) {
+
+	var error = __webpack_require__(9);
+
+	module.exports = function (options, ctx, req, res, routingInfo) {
+	    if (!ctx.query.code) {
+	        return options.loginError({
+	            code: 401,
+	            message: 'Authentication error.',
+	            callbackQuery: ctx.query
+	        }, ctx, req, res, routingInfo.baseUrl);
+	    }
+
+	    var authParams = {
+	        clientId: options.clientId(ctx, req),
+	        domain: options.domain(ctx, req),
+	        clientSecret: options.clientSecret(ctx, req)
+	    };
+	    var count = !!authParams.clientId + !!authParams.domain + !!authParams.clientSecret;
+	    if (count !== 3) {
+	        return error({
+	            code: 400,
+	            message: 'Auth0 Client ID, Client Secret, and Auth0 Domain must be specified.'
+	        }, res);
+	    }
+
+	    return __webpack_require__(14)
+	        .post('https://' + authParams.domain + '/oauth/token')
+	        .type('form')
+	        .send({
+	            client_id: authParams.clientId,
+	            client_secret: authParams.clientSecret,
+	            redirect_uri: routingInfo.baseUrl + '/callback',
+	            code: ctx.query.code,
+	            grant_type: 'authorization_code'
+	        })
+	        .timeout(15000)
+	        .end(function (err, ares) {
+	            if (err || !ares.ok) {
+	                return options.loginError({
+	                    code: 502,
+	                    message: 'OAuth code exchange completed with error.',
+	                    error: err && err.message,
+	                    auth0Status: ares && ares.status,
+	                    auth0Response: ares && (ares.body || ares.text)
+	                }, ctx, req, res, routingInfo.baseUrl);
+	            }
+
+	            return issueApiKey(ares.body.id_token);
+	        });
+
+	    function issueApiKey(id_token) {
+	        var jwt = __webpack_require__(11);
+	        var claims;
+	        try {
+	            claims = jwt.decode(id_token);
+	        }
+	        catch (e) {
+	            return options.loginError({
+	                code: 502,
+	                message: 'Cannot parse id_token returned from Auth0.',
+	                id_token: id_token,
+	                error: e.message
+	            }, ctx, req, res, routingInfo.baseUrl);
+	        }
+
+	        // Issue apiKey by re-signing the id_token claims 
+	        // with configured secret (webtask token by default).
+
+	        var secret = options.webtaskSecret(ctx, req);
+	        if (!secret) {
+	            return error({
+	                code: 400,
+	                message: 'The webtask secret must be be provided to allow for issuing apiKeys.'
+	            }, res);
+	        }
+
+	        claims.iss = routingInfo.baseUrl;
+	        req.user = ctx.user = claims;
+	        ctx.apiKey = jwt.sign(claims, secret);
+
+	        // Perform post-login action (redirect to /?apiKey=... by default)
+	        return options.loginSuccess(ctx, req, res, routingInfo.baseUrl);
+	    }
+	};
+
+
+/***/ }),
+/* 14 */
+/***/ (function(module, exports) {
 
 	module.exports = require("superagent");
 
-/***/ },
-/* 10 */
-/***/ function(module, exports, __webpack_require__) {
+/***/ }),
+/* 15 */
+/***/ (function(module, exports) {
 
-	/* WEBPACK VAR INJECTION */(function(setImmediate) {const LRU = __webpack_require__(13);
-	const _ = __webpack_require__(14);
-	const lru_params =  [ 'max', 'maxAge', 'length', 'dispose', 'stale' ];
+	module.exports = require("boom");
 
-	module.exports = function (options) {
-	  var cache = new LRU(_.pick(options, lru_params));
-	  var load = options.load;
-	  var hash = options.hash;
+/***/ }),
+/* 16 */
+/***/ (function(module, exports) {
 
-	  var result = function () {
-	    var args = _.toArray(arguments);
-	    var parameters = args.slice(0, -1);
-	    var callback = args.slice(-1).pop();
+	module.exports = require("request");
 
-	    var key;
+/***/ }),
+/* 17 */
+/***/ (function(module, exports) {
 
-	    if (parameters.length === 0 && !hash) {
-	      //the load function only receives callback.
-	      key = '_';
-	    } else {
-	      key = hash.apply(options, parameters);
-	    }
+	module.exports = require("lru-memoizer");
 
-	    var fromCache = cache.get(key);
+/***/ }),
+/* 18 */
+/***/ (function(module, exports) {
 
-	    if (fromCache) {
-	      return setImmediate.apply(null, [callback, null].concat(fromCache));
-	    }
+	module.exports = {"title":"Auth0 Logs to Elasticsearch","name":"auth0-logs-to-elasticsearch","version":"1.1.0","author":"truepillars","description":"This extension will take all of your Auth0 logs and export them to Elasticsearch","type":"cron","repository":"https://github.com/truepillars/auth0-logs-to-elasticsearch","keywords":["auth0","extension"],"schedule":"0 */5 * * * *","auth0":{"scopes":"read:logs"},"secrets":{"BATCH_SIZE":{"description":"The ammount of logs to be read on each execution. Maximun is 100.","default":100},"ELASTICSEARCH_URL":{"description":"Elasticsearch URL","required":true},"ELASTICSEARCH_INDEX":{"description":"Elasticsearch Index","required":true},"LOG_LEVEL":{"description":"This allows you to specify the log level of events that need to be sent","type":"select","allowMultiple":true,"options":[{"value":"-","text":""},{"value":"0","text":"Debug"},{"value":"1","text":"Info"},{"value":"2","text":"Warning"},{"value":"3","text":"Error"},{"value":"4","text":"Critical"}]},"LOG_TYPES":{"description":"If you only want to send events with a specific type (eg: failed logins)","type":"select","allowMultiple":true,"options":[{"value":"-","text":""},{"value":"s","text":"Success Login (Info)"},{"value":"seacft","text":"Success Exchange (Info)"},{"value":"feacft","text":"Failed Exchange (Error)"},{"value":"f","text":"Failed Login (Error)"},{"value":"w","text":"Warnings During Login (Warning)"},{"value":"du","text":"Deleted User (Info)"},{"value":"fu","text":"Failed Login (invalid email/username) (Error)"},{"value":"fp","text":"Failed Login (wrong password) (Error)"},{"value":"fc","text":"Failed by Connector (Error)"},{"value":"fco","text":"Failed by CORS (Error)"},{"value":"con","text":"Connector Online (Info)"},{"value":"coff","text":"Connector Offline (Error)"},{"value":"fcpro","text":"Failed Connector Provisioning (Critical)"},{"value":"ss","text":"Success Signup (Info)"},{"value":"fs","text":"Failed Signup (Error)"},{"value":"cs","text":"Code Sent (Debug)"},{"value":"cls","text":"Code/Link Sent (Debug)"},{"value":"sv","text":"Success Verification Email (Debug)"},{"value":"fv","text":"Failed Verification Email (Debug)"},{"value":"scp","text":"Success Change Password (Info)"},{"value":"fcp","text":"Failed Change Password (Error)"},{"value":"sce","text":"Success Change Email (Info)"},{"value":"fce","text":"Failed Change Email (Error)"},{"value":"scu","text":"Success Change Username (Info)"},{"value":"fcu","text":"Failed Change Username (Error)"},{"value":"scpn","text":"Success Change Phone Number (Info)"},{"value":"fcpn","text":"Failed Change Phone Number (Error)"},{"value":"svr","text":"Success Verification Email Request (Debug)"},{"value":"fvr","text":"Failed Verification Email Request (Error)"},{"value":"scpr","text":"Success Change Password Request (Debug)"},{"value":"fcpr","text":"Failed Change Password Request (Error)"},{"value":"fn","text":"Failed Sending Notification (Error)"},{"value":"limit_wc","text":"Blocked Account (Critical)"},{"value":"limit_ui","text":"Too Many Calls to /userinfo (Critical)"},{"value":"api_limit","text":"Rate Limit On API (Critical)"},{"value":"sdu","text":"Successful User Deletion (Info)"},{"value":"fdu","text":"Failed User Deletion (Error)"}]}}}
 
-	    load.apply(null, parameters.concat(function (err) {
-	      if (err) {
-	        return callback(err);
-	      }
-
-	      cache.set(key, _.toArray(arguments).slice(1));
-
-	      return callback.apply(null, arguments);
-
-	    }));
-
-	  };
-
-	  result.keys = cache.keys.bind(cache);
-
-	  return result;
-	};
-
-
-	module.exports.sync = function (options) {
-	  var cache = new LRU(_.pick(options, lru_params));
-	  var load = options.load;
-	  var hash = options.hash;
-
-	  var result = function () {
-	    var args = _.toArray(arguments);
-
-	    var key = hash.apply(options, args);
-
-	    var fromCache = cache.get(key);
-
-	    if (fromCache) {
-	      return fromCache;
-	    }
-
-	    var result = load.apply(null, args);
-
-	    cache.set(key, result);
-
-	    return result;
-	  };
-
-	  result.keys = cache.keys.bind(cache);
-
-	  return result;
-	};
-	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(11).setImmediate))
-
-/***/ },
-/* 11 */
-/***/ function(module, exports, __webpack_require__) {
-
-	/* WEBPACK VAR INJECTION */(function(setImmediate, clearImmediate) {var nextTick = __webpack_require__(12).nextTick;
-	var apply = Function.prototype.apply;
-	var slice = Array.prototype.slice;
-	var immediateIds = {};
-	var nextImmediateId = 0;
-
-	// DOM APIs, for completeness
-
-	exports.setTimeout = function() {
-	  return new Timeout(apply.call(setTimeout, window, arguments), clearTimeout);
-	};
-	exports.setInterval = function() {
-	  return new Timeout(apply.call(setInterval, window, arguments), clearInterval);
-	};
-	exports.clearTimeout =
-	exports.clearInterval = function(timeout) { timeout.close(); };
-
-	function Timeout(id, clearFn) {
-	  this._id = id;
-	  this._clearFn = clearFn;
-	}
-	Timeout.prototype.unref = Timeout.prototype.ref = function() {};
-	Timeout.prototype.close = function() {
-	  this._clearFn.call(window, this._id);
-	};
-
-	// Does not start the time, just sets up the members needed.
-	exports.enroll = function(item, msecs) {
-	  clearTimeout(item._idleTimeoutId);
-	  item._idleTimeout = msecs;
-	};
-
-	exports.unenroll = function(item) {
-	  clearTimeout(item._idleTimeoutId);
-	  item._idleTimeout = -1;
-	};
-
-	exports._unrefActive = exports.active = function(item) {
-	  clearTimeout(item._idleTimeoutId);
-
-	  var msecs = item._idleTimeout;
-	  if (msecs >= 0) {
-	    item._idleTimeoutId = setTimeout(function onTimeout() {
-	      if (item._onTimeout)
-	        item._onTimeout();
-	    }, msecs);
-	  }
-	};
-
-	// That's not how node.js implements it but the exposed api is the same.
-	exports.setImmediate = typeof setImmediate === "function" ? setImmediate : function(fn) {
-	  var id = nextImmediateId++;
-	  var args = arguments.length < 2 ? false : slice.call(arguments, 1);
-
-	  immediateIds[id] = true;
-
-	  nextTick(function onNextTick() {
-	    if (immediateIds[id]) {
-	      // fn.call() is faster so we optimize for the common use-case
-	      // @see http://jsperf.com/call-apply-segu
-	      if (args) {
-	        fn.apply(null, args);
-	      } else {
-	        fn.call(null);
-	      }
-	      // Prevent ids from leaking
-	      exports.clearImmediate(id);
-	    }
-	  });
-
-	  return id;
-	};
-
-	exports.clearImmediate = typeof clearImmediate === "function" ? clearImmediate : function(id) {
-	  delete immediateIds[id];
-	};
-	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(11).setImmediate, __webpack_require__(11).clearImmediate))
-
-/***/ },
-/* 12 */
-/***/ function(module, exports) {
-
-	// shim for using process in browser
-
-	var process = module.exports = {};
-	var queue = [];
-	var draining = false;
-	var currentQueue;
-	var queueIndex = -1;
-
-	function cleanUpNextTick() {
-	    draining = false;
-	    if (currentQueue.length) {
-	        queue = currentQueue.concat(queue);
-	    } else {
-	        queueIndex = -1;
-	    }
-	    if (queue.length) {
-	        drainQueue();
-	    }
-	}
-
-	function drainQueue() {
-	    if (draining) {
-	        return;
-	    }
-	    var timeout = setTimeout(cleanUpNextTick);
-	    draining = true;
-
-	    var len = queue.length;
-	    while(len) {
-	        currentQueue = queue;
-	        queue = [];
-	        while (++queueIndex < len) {
-	            if (currentQueue) {
-	                currentQueue[queueIndex].run();
-	            }
-	        }
-	        queueIndex = -1;
-	        len = queue.length;
-	    }
-	    currentQueue = null;
-	    draining = false;
-	    clearTimeout(timeout);
-	}
-
-	process.nextTick = function (fun) {
-	    var args = new Array(arguments.length - 1);
-	    if (arguments.length > 1) {
-	        for (var i = 1; i < arguments.length; i++) {
-	            args[i - 1] = arguments[i];
-	        }
-	    }
-	    queue.push(new Item(fun, args));
-	    if (queue.length === 1 && !draining) {
-	        setTimeout(drainQueue, 0);
-	    }
-	};
-
-	// v8 likes predictible objects
-	function Item(fun, array) {
-	    this.fun = fun;
-	    this.array = array;
-	}
-	Item.prototype.run = function () {
-	    this.fun.apply(null, this.array);
-	};
-	process.title = 'browser';
-	process.browser = true;
-	process.env = {};
-	process.argv = [];
-	process.version = ''; // empty string to avoid regexp issues
-	process.versions = {};
-
-	function noop() {}
-
-	process.on = noop;
-	process.addListener = noop;
-	process.once = noop;
-	process.off = noop;
-	process.removeListener = noop;
-	process.removeAllListeners = noop;
-	process.emit = noop;
-
-	process.binding = function (name) {
-	    throw new Error('process.binding is not supported');
-	};
-
-	process.cwd = function () { return '/' };
-	process.chdir = function (dir) {
-	    throw new Error('process.chdir is not supported');
-	};
-	process.umask = function() { return 0; };
-
-
-/***/ },
-/* 13 */
-/***/ function(module, exports) {
-
-	module.exports = require("lru-cache");
-
-/***/ },
-/* 14 */
-/***/ function(module, exports) {
-
-	module.exports = require("lodash");
-
-/***/ }
+/***/ })
 /******/ ]);
